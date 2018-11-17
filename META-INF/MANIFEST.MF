@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Extracem
+Bundle-SymbolicName: extractmethod;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Activator: extracem.Activator
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime,
+ org.eclipse.jdt.core,
+ org.eclipse.core.resources,
+ org.eclipse.jdt.ui,
+ org.eclipse.ltk.core.refactoring
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
+Bundle-ActivationPolicy: lazy
