@@ -4,6 +4,8 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NumberLiteral;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
@@ -21,6 +23,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import org.eclipse.core.commands.AbstractHandler;
@@ -107,20 +111,23 @@ public class SampleHandler extends AbstractHandler {
 
 	private static void refactorCu(ICompilationUnit cu, NullProgressMonitor pm) throws CoreException, InterruptedException {
 		List<int[]> ranges = getExpRanges(cu);
+		System.out.println(ranges);
 		List<Change> changes = new ArrayList<>();
-		for (int[] sls : ranges) {changes.add(refactorMethod(cu, sls[0], sls[1]));}
-		Change[] cs = new Change[changes.size()];
-		cs = changes.toArray(cs);
+		for (int[] sls : ranges) {System.out.println(sls[0]);changes.add(refactorMethod(cu, sls[0], sls[1]));}
+		// Change[] cs = new Change[changes.size()];
+		// cs = changes.toArray(cs);
 		
 		for (Change c : changes) {
+			if (c != null) {
 			c.initializeValidationData(pm);
-			Change undo = c.perform(new SubProgressMonitor(pm,1));
+			Change undo = c.perform(pm);
 //			System.out.println("poop");
 			cu.open(pm);
 //			System.out.println(cu);
 			getExtracted(cu);
-			undo.initializeValidationData(new SubProgressMonitor(pm,1));
+			undo.initializeValidationData(pm);
 			undo.perform(pm);
+			}
 		}
 	}
 
@@ -131,12 +138,20 @@ public class SampleHandler extends AbstractHandler {
 		// refactoring.setVisibility(Modifier.DEFAULT);
 		NullProgressMonitor pm = new NullProgressMonitor();
 		refactoring.checkAllConditions(pm);
-		return refactoring.createChange(pm);
+		Change change = null;
+		try {
+			change =refactoring.createChange(pm); 
+		} catch (NullPointerException e) {
+			change = null;
+		}
+		return change;
 	}
 
 	private static List<int[]> getExpRanges(ICompilationUnit cu) {
 		ASTParser parser = ASTParser.newParser(AST.JLS8);
 		parser.setSource(cu);
+		parser.setKind(ASTParser.K_COMPILATION_UNIT);
+		parser.setResolveBindings(true);
 		CompilationUnit result = (CompilationUnit) parser.createAST(null);
 		
 		
@@ -150,7 +165,7 @@ public class SampleHandler extends AbstractHandler {
 	static void getExtracted(ICompilationUnit cu) {
 		ICompilationUnit[] cus = {cu};
 		SearchEngine se = new SearchEngine(cus);
-		SearchPattern sp = SearchPattern.createPattern("extracted() int", IJavaSearchConstants.METHOD, IJavaSearchConstants.DECLARATIONS, SearchPattern.R_EXACT_MATCH);
+		SearchPattern sp = SearchPattern.createPattern("extracted(int) int", IJavaSearchConstants.METHOD, IJavaSearchConstants.DECLARATIONS, SearchPattern.R_EXACT_MATCH);
 		SearchParticipant[] spar = {SearchEngine.getDefaultSearchParticipant()};
 		IJavaSearchScope scope = SearchEngine.createWorkspaceScope();
 		SearchRequestor requestor = new SearchRequestor() {
@@ -169,13 +184,25 @@ public class SampleHandler extends AbstractHandler {
 					out.println(src);
 					out.close();
 					
-					Runtime r = Runtime.getRuntime();
+					Process c0 = null;
+					String[] cmd0 = {"/usr/local/bin/ant","build"};
+					ProcessBuilder pb0 = new ProcessBuilder(cmd0);
+					pb0.directory(new File("/Users/remywang/jpf-symbc/"));
+					c0 = pb0.start();
+					c0.waitFor();
+					
 					Process c = null;
 					String[] cmd = {"/usr/local/bin/ant","build"};
 					ProcessBuilder pb = new ProcessBuilder(cmd);
 					pb.directory(new File("/Users/remywang/jpf-symbc/"));
 					c = pb.start();
 					c.waitFor();
+
+					Runtime r = Runtime.getRuntime();
+					
+					
+					// List<String> encoded = Files.readAllLines(Paths.get("/Users/remywang/jpf-symbc/src/examples/ByteTest.java"));
+					//for (String s : encoded) { System.out.println(s);}
 					
 					Process p = r.exec("/Users/remywang/jpf-core/bin/jpf /Users/remywang/jpf-symbc/src/examples/ByteTest.jpf");
 //					Process p = r.exec("echo yoyo");
@@ -189,9 +216,12 @@ public class SampleHandler extends AbstractHandler {
 					}
 					
 					if (line.contains("AssertionError")) {
+						System.out.println(line);
 						  System.out.println("bad");
+						  System.out.println(m.getSource());
 					  } else {
 						  System.out.println("good");
+						  System.out.println(m.getSource());
 					  }
 
 					b.close();
@@ -223,14 +253,14 @@ public class SampleHandler extends AbstractHandler {
 		
 		String src ="import gov.nasa.jpf.symbc.Debug;\n" + 
 				"public class ByteTest {\n" + 
-				"        public static int f() {\n" + 
-				"                return 1;\n" + 
+				"        public static int f(int x) {\n" + 
+				"                return 2*x;\n" + 
 				"        }\n" + 
 				"\n"+
 				"static "+ mstr +
 				"\n" + 
 				"        public static void test(int x) {\n" + 
-				"                if (f() != extracted())\n" + 
+				"                if (f(x) != extracted(x))\n" + 
 				"                        assert false;\n" + 
 				"        }\n" + 
 				"\n" + 
@@ -261,14 +291,32 @@ class RefactorVisitor extends ASTVisitor {
 	
 	private List<int[]> ranges;	
 		
-	@Override
-	public boolean visit(NumberLiteral node) {
-		int start = node.getStartPosition();
-		int length = node.getLength();
-		int[] range = {start, length};
-		ranges.add(range);
-		return super.visit(node);
+	@Override 
+	public void preVisit(ASTNode node) {
+		if (node instanceof Expression) {
+			ITypeBinding ty = ((Expression) node).resolveTypeBinding();
+			System.out.println(node.toString());
+			System.out.println(ty);
+			if (ty != null && ty.getName().equals("int")) {
+				int start = node.getStartPosition();
+				int length = node.getLength();
+				int[] range = {start, length};
+				ranges.add(range);
+			}
+		}
 	}
+	
+	
+	
+//	@Override
+//	public boolean visit(NumberLiteral node) {
+//		int start = node.getStartPosition();
+//		int length = node.getLength();
+//		int[] range = {start, length};
+//		ranges.add(range);
+//		System.out.println(node);
+//		return super.visit(node);
+//	}
 	
 	public List<int[]> getRanges() {return ranges;}
 }
