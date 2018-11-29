@@ -6,8 +6,6 @@ import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ITypeBinding;
-import org.eclipse.jdt.core.dom.Modifier;
-import org.eclipse.jdt.core.dom.NumberLiteral;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.IJavaSearchScope;
 import org.eclipse.jdt.core.search.SearchEngine;
@@ -23,8 +21,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import org.eclipse.core.commands.AbstractHandler;
@@ -36,7 +32,6 @@ import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.NullProgressMonitor;
-import org.eclipse.core.runtime.SubProgressMonitor;
 import org.eclipse.jdt.internal.corext.refactoring.code.ExtractMethodRefactoring;
 import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.jdt.core.ICompilationUnit;
@@ -50,24 +45,6 @@ import org.eclipse.jdt.core.JavaModelException;
 public class SampleHandler extends AbstractHandler {
 
 	private static IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
-
-	
-	public static void showmeall () throws CoreException {
-		for (IProject p : root.getProjects()) {
-			p.open(null);
-			IJavaProject javaProject = JavaCore.create(p);
-			IProjectDescription description = p.getDescription();
-			description.setNatureIds(new String[] { JavaCore.NATURE_ID });
-			p.setDescription(description, null);
-			
-			for (IPackageFragment pf : javaProject.getPackageFragments()) {
-				pf.open(new NullProgressMonitor());
-				for (ICompilationUnit cu : pf.getCompilationUnits()) {
-//					System.out.println(cu);
-				}
-			}
-		}
-	}
 	
 	@Override
 	public Object execute(ExecutionEvent event) throws ExecutionException {
@@ -113,17 +90,13 @@ public class SampleHandler extends AbstractHandler {
 		List<int[]> ranges = getExpRanges(cu);
 		System.out.println(ranges);
 		List<Change> changes = new ArrayList<>();
-		for (int[] sls : ranges) {System.out.println(sls[0]);changes.add(refactorMethod(cu, sls[0], sls[1]));}
-		// Change[] cs = new Change[changes.size()];
-		// cs = changes.toArray(cs);
+		for (int[] sls : ranges) {changes.add(refactorMethod(cu, sls[0], sls[1]));}
 		
 		for (Change c : changes) {
 			if (c != null) {
 			c.initializeValidationData(pm);
 			Change undo = c.perform(pm);
-//			System.out.println("poop");
 			cu.open(pm);
-//			System.out.println(cu);
 			getExtracted(cu);
 			undo.initializeValidationData(pm);
 			undo.perform(pm);
@@ -133,9 +106,7 @@ public class SampleHandler extends AbstractHandler {
 
 	private static Change refactorMethod(ICompilationUnit cu, int start, int length) throws CoreException {
 		ExtractMethodRefactoring refactoring = new ExtractMethodRefactoring(cu, start, length);
-		//refactoring.setMethodName("extracted" + String.valueOf(start) + String.valueOf(length));
 		refactoring.setMethodName("extracted");
-		// refactoring.setVisibility(Modifier.DEFAULT);
 		NullProgressMonitor pm = new NullProgressMonitor();
 		refactoring.checkAllConditions(pm);
 		Change change = null;
@@ -171,12 +142,6 @@ public class SampleHandler extends AbstractHandler {
 		SearchRequestor requestor = new SearchRequestor() {
 			public void acceptSearchMatch(SearchMatch match) {
 				IMethod m = (IMethod) match.getElement();
-//				try {
-//					System.out.println(m.getSource());
-//				} catch (JavaModelException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
 				
 				try {
 					String src = getJPFcu(m);
@@ -257,7 +222,7 @@ public class SampleHandler extends AbstractHandler {
 				"                return 2*x;\n" + 
 				"        }\n" + 
 				"\n"+
-				"static "+ mstr +
+				 mstr +
 				"\n" + 
 				"        public static void test(int x) {\n" + 
 				"                if (f(x) != extracted(x))\n" + 
@@ -295,8 +260,8 @@ class RefactorVisitor extends ASTVisitor {
 	public void preVisit(ASTNode node) {
 		if (node instanceof Expression) {
 			ITypeBinding ty = ((Expression) node).resolveTypeBinding();
-			System.out.println(node.toString());
-			System.out.println(ty);
+			//System.out.println(node.toString());
+			//System.out.println(ty);
 			if (ty != null && ty.getName().equals("int")) {
 				int start = node.getStartPosition();
 				int length = node.getLength();
@@ -305,18 +270,6 @@ class RefactorVisitor extends ASTVisitor {
 			}
 		}
 	}
-	
-	
-	
-//	@Override
-//	public boolean visit(NumberLiteral node) {
-//		int start = node.getStartPosition();
-//		int length = node.getLength();
-//		int[] range = {start, length};
-//		ranges.add(range);
-//		System.out.println(node);
-//		return super.visit(node);
-//	}
-	
+
 	public List<int[]> getRanges() {return ranges;}
 }
